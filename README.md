@@ -22,7 +22,8 @@ references/
   upload_assets.py           CODEX 批量上传 CLI（纯标准库）
   launch_scripts.md          安装依赖/启动/开放防火墙 的 .bat
   web/                       最小手机前端模板（index.html + app.js）
-  CLOUDFLARE.md               外网穿透（trycloudflare）指南
+  CLOUDFLARE.md               外网穿透（trycloudflare / 固定域名）指南
+  cloudflared-config.example.yml  固定隧道配置模板
 ```
 
 ## 在 WorkBuddy 里使用

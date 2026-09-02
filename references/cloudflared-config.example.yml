@@ -1,0 +1,10 @@
+# Cloudflare 固定隧道配置（复制为 cloudflared-config.yml 后改三处）
+# 1. tunnel:            与 `cloudflared tunnel create <名字>` 一致
+# 2. credentials-file:  create 后生成的 <tunnel-id>.json 完整路径
+# 3. hostname:          你的子域名（需先 `cloudflared tunnel route dns` 建好 DNS）
+tunnel: comfy-console
+credentials-file: C:\Users\你的用户名\.cloudflared\00000000-0000-0000-0000-000000000000.json
+ingress:
+  - hostname: comfy.你的域名.com
+    service: http://localhost:8790
+  - service: http_status:404

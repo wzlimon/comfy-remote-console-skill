@@ -84,6 +84,27 @@ cloudflared tunnel --url http://localhost:8790
 pause
 ```
 > 跑之前请先双击「启动.bat」把控制台拉起（:8790）。临时隧道每次重启地址都变，详见 `references/CLOUDFLARE.md`。
+
+## 固定隧道.bat（固定域名，长期方案，用 Cloudflare 自有域名）
+```bat
+@echo off
+chcp 65001 >nul
+cd /d "%~dp0"
+title ComfyUI 固定隧道 (Cloudflare Tunnel)
+where cloudflared >nul 2>&1
+if errorlevel 1 (
+    echo [提示] 未检测到 cloudflared，请先 winget install Cloudflare.cloudflared
+    pause & exit /b 1
+)
+if not exist "cloudflared-config.yml" (
+    echo [错误] 找不到 cloudflared-config.yml，请先复制 cloudflared-config.example.yml 并填好 tunnel/credentials-file/hostname
+    pause & exit /b 1
+)
+echo 正在拉起固定隧道（地址固定不变）...
+cloudflared tunnel --config cloudflared-config.yml run comfy-console
+pause
+```
+> 需先在 Cloudflare 后台接入域名，并 `cloudflared login` → `create` → `route dns`，详见 `references/CLOUDFLARE.md` 第五节。
 ```
 
 ## 设导演令牌（管理员 PowerShell，一次性）
