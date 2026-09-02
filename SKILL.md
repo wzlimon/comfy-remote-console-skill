@@ -1,9 +1,9 @@
 ---
 name: comfy-remote-console
-description: "在一台装了 ComfyUI 的 Windows 电脑上，搭建一个手机可远程访问的网页控制台（表单提交→本机 ComfyUI 生成→网页取片），并具备：双认证（网页密码 + 导演令牌 Bearer 供 CODEX/自动化调度）、项目专库资产管理（/api/refs 递归、/api/upload 安全批量上传、同名覆盖）、ngrok 公网隧道。当用户要「让另一台电脑也能手机远程操控 ComfyUI」「把本地 AI 服务做成手机网页控制台」「给自动化/CODEX 开放批量上传资产接口」时使用。"
-description_zh: "为本地 ComfyUI 搭建手机可远程访问的网页控制台（双认证 + 项目专库 + ngrok）"
-description_en: "Mobile-accessible remote web console for a local ComfyUI (dual auth + project asset library + ngrok)"
-version: 1.0.0
+description: "在一台装了 ComfyUI 的 Windows 电脑上，搭建一个手机可远程访问的网页控制台（表单提交→本机 ComfyUI 生成→网页取片），并具备：双认证（网页密码 + 导演令牌 Bearer 供 CODEX/自动化调度）、项目专库资产管理（/api/refs 递归、/api/upload 安全批量上传、同名覆盖）、Cloudflare trycloudflare 公网隧道（免费、无流量限制）。当用户要「让另一台电脑也能手机远程操控 ComfyUI」「把本地 AI 服务做成手机网页控制台」「给自动化/CODEX 开放批量上传资产接口」时使用。"
+description_zh: "为本地 ComfyUI 搭建手机可远程访问的网页控制台（双认证 + 项目专库 + trycloudflare 隧道）"
+description_en: "Mobile-accessible remote web console for a local ComfyUI (dual auth + project asset library + trycloudflare tunnel)"
+version: 1.1.0
 allowed-tools:
   - Read
   - Write
@@ -12,7 +12,7 @@ allowed-tools:
   - Grep
   - Glob
   - AskUserQuestion
-trigger: ["手机远程", "远程控制台", "comfy 手机", "外网访问 comfyui", "CODEX 上传资产", "项目专库", "ngrok comfyui", "remote console", "comfy-mobile-studio"]
+trigger: ["手机远程", "远程控制台", "comfy 手机", "外网访问 comfyui", "CODEX 上传资产", "项目专库", "trycloudflare comfyui", "cloudflared", "ngrok comfyui", "remote console", "comfy-mobile-studio"]
 ---
 
 # ComfyUI 手机远程控制台框架
@@ -32,7 +32,7 @@ trigger: ["手机远程", "远程控制台", "comfy 手机", "外网访问 comfy
         │                         ├─ 项目专库：data/uploads/<project>/<subdir>/
         │                         └─ 成品：data/outputs/<project>/{raw,upscaled,thumbs}
         ▼
-   ngrok 公网隧道（可选，免费版地址重启即变）
+   Cloudflare trycloudflare 临时隧道（可选，免费 / 无流量限制 / 地址重启即变）
         ▼
    任意网络下的手机访问
 ```
@@ -45,7 +45,7 @@ trigger: ["手机远程", "远程控制台", "comfy 手机", "外网访问 comfy
 
 ## 二、在新机器上部署（步骤）
 
-1. **前置**：Windows + Python 3.10+；本机 ComfyUI 已在 `127.0.0.1:8188` 跑起来；（可选）已装 ngrok。
+1. **前置**：Windows + Python 3.10+；本机 ComfyUI 已在 `127.0.0.1:8188` 跑起来；（可选）已装 `cloudflared`（外网访问用，见第七节）。
 2. 把本 skill `references/` 下的代码落到新目录（如 `D:\comfy-mobile-studio\`）：
    - `server_template.py` → 改名/扩展为 `server.py`（这是控制台主体）
    - `config.example.yaml` → 复制为 `config.yaml` 并据实填写（见第四节）
@@ -61,7 +61,7 @@ trigger: ["手机远程", "远程控制台", "comfy 手机", "外网访问 comfy
    记下令牌值，给 CODEX / 远端脚本用。
 5. 开放防火墙（让局域网手机能连）：用 `开放端口.bat`（见 references，本质是 `netsh advfirewall firewall add rule ... localport=8790`）。
 6. 启动：双击 `启动.bat`（内部跑 `run_server.py` → 读注册表令牌 → `server.py`）。手机连同一 WiFi 打开 `http://<本机IP>:8790`。
-7. **要外网访问**：另开一个窗口 `ngrok http 8790`，把生成的 `https://xxxx.ngrok-free.app` 发给手机（免费版每次重启地址都变，见第七节）。
+7. **要外网访问**：另开一个窗口 `cloudflared tunnel --url http://localhost:8790`，把生成的 `https://xxxx.trycloudflare.com` 发给手机（免费、无流量限制、地址重启即变，见第七节）。
 
 > 完整脚本见 `references/launch_scripts.md`。
 
@@ -121,15 +121,18 @@ python upload_assets.py --project tianbao_nimingshu \
 - [ ] `H3_DIRECTOR_TOKEN` 仅存于 Windows 用户环境变量，未进任何配置文件 / git。
 - [ ] 上传与文件路由全部走 `safe_upload_path`，杜绝路径穿越与任意文件读取。
 - [ ] `max_upload_mb` 合理（防大文件打满磁盘）。
-- [ ] ngrok 免费版地址随机、且会记录流量；敏感场景考虑自建隧道 / 固定域名付费版。
+- [ ] trycloudflare / quick tunnel 地址随机且重启即变；敏感场景考虑固定隧道（Cloudflare 自有域名）或自建 frp。
 
 ---
 
-## 七、ngrok 公网隧道与局限
+## 七、Cloudflare trycloudflare 临时隧道（免费、无流量限制）
 
-- 免费版：`ngrok http 8790` → 得到随机 `https://xxxx.ngrok-free.app`，**每次重启 ngrok 地址都变**，需重新发给手机。
-- 付费版可绑固定域名。
-- 替代：frp / 路由器端口转发 / Cloudflare Tunnel（稳定固定地址，推荐长期使用）。
+- 命令：`cloudflared tunnel --url http://localhost:8790` → 得到随机 `https://xxxx.trycloudflare.com`，**免费、无需登录、无流量限制**，但**每次重启地址都变**，需重新发给手机。
+- 安装：见 `references/CLOUDFLARE.md`（winget / 官方下载 / GitHub release 任选）。
+- 固定域名（长期使用）：需 Cloudflare 账号 + 自有域名，`cloudflared tunnel create` 后地址不变，详见 `references/CLOUDFLARE.md` 第五节。
+- 替代：frp / 路由器端口转发（有公网 IP 或中转服务器时自建，地址可控）。
+
+> 注：原 ngrok 方案因免费版有每月流量上限，已弃用；改成 trycloudflare 解决流量限制问题。
 
 ---
 

@@ -63,6 +63,29 @@ if errorlevel 1 (
 pause
 ```
 
+## 公网隧道.bat（外网访问，用 Cloudflare trycloudflare，免费无流量限制）
+```bat
+@echo off
+chcp 65001 >nul
+cd /d "%~dp0"
+title ComfyUI 公网隧道 (trycloudflare)
+where cloudflared >nul 2>&1
+if errorlevel 1 (
+    echo [提示] 未检测到 cloudflared，请先安装：
+    echo   winget install Cloudflare.cloudflared
+    echo   或下载 https://github.com/cloudflare/cloudflared/releases 的 cloudflared-windows-amd64.exe 放到本目录
+    pause & exit /b 1
+)
+echo 正在建立 trycloudflare 免费临时隧道（无流量限制，重启地址即变）...
+echo 请确保「启动.bat」已先把控制台拉起在 :8790。
+echo 打开下方输出的 https://xxxx.trycloudflare.com 即可外网访问控制台。
+echo.
+cloudflared tunnel --url http://localhost:8790
+pause
+```
+> 跑之前请先双击「启动.bat」把控制台拉起（:8790）。临时隧道每次重启地址都变，详见 `references/CLOUDFLARE.md`。
+```
+
 ## 设导演令牌（管理员 PowerShell，一次性）
 ```powershell
 [Environment]::SetEnvironmentVariable("H3_DIRECTOR_TOKEN", (New-Guid).ToString()+"x", "User")
