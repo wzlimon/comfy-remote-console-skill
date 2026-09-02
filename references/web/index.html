@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>ComfyUI 手机控制台</title>
+<style>
+  :root{--bg:#0f1115;--card:#1a1d24;--fg:#e7e9ee;--mut:#8b93a3;--acc:#4f8cff;--ok:#36c277;--bad:#ff5d5d}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif;padding:12px}
+  h1{font-size:18px;margin:4px 0 12px}
+  .card{background:var(--card);border-radius:12px;padding:12px;margin-bottom:12px}
+  label{display:block;color:var(--mut);font-size:13px;margin:8px 0 4px}
+  input,textarea,select{width:100%;background:#0c0e12;border:1px solid #2a2f3a;color:var(--fg);border-radius:8px;padding:9px;font-size:15px}
+  textarea{min-height:84px;resize:vertical}
+  button{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:11px 14px;font-size:15px;width:100%;margin-top:10px}
+  .row{display:flex;gap:8px}
+  .row>*{flex:1}
+  .gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+  .gallery img{width:100%;aspect-ratio:1;border-radius:8px;border:2px solid transparent;object-fit:cover}
+  .gallery img.sel{border-color:var(--acc)}
+  .gtype{position:absolute;font-size:10px;background:#000a;padding:1px 4px;border-radius:4px;color:#fff}
+  .task{border-top:1px solid #2a2f3a;padding:8px 0;font-size:13px}
+  .tag{display:inline-block;background:#2a2f3a;border-radius:6px;padding:1px 6px;margin-right:4px;color:var(--mut)}
+  a.dl{color:var(--acc);text-decoration:none}
+  #login{display:none}
+</style>
+</head>
+<body>
+<div id="login" class="card">
+  <h1>请输入访问密码</h1>
+  <input id="pw" type="password" placeholder="密码">
+  <button onclick="doLogin()">进入</button>
+</div>
+
+<div id="app" style="display:none">
+  <h1>🦌 ComfyUI 手机控制台</h1>
+
+  <div class="card">
+    <label>项目专库（可选，如 tianbao_nimingshu）</label>
+    <input id="project" placeholder="留空=默认库">
+    <label>提示词</label>
+    <textarea id="prompt" placeholder="描述你要生成的画面..."></textarea>
+    <div class="row">
+      <div><label>模式</label>
+        <select id="mode"><option value="t2v">文生视频</option><option value="i2v">图生视频</option><option value="flf">首尾帧</option><option value="r2v">万能参考</option><option value="t2i">文生图</option></select></div>
+      <div><label>比例</label>
+        <select id="ratio"><option value="">默认</option><option>16:9</option><option>9:16</option><option>1:1</option><option>4:3</option></select></div>
+    </div>
+    <label>时长(秒)</label><input id="duration" value="5">
+    <label>参考图（从图库选，可多选）</label>
+    <div class="gallery" id="gallery"></div>
+    <button onclick="submitTask()">提交生成</button>
+  </div>
+
+  <div class="card">
+    <div class="row"><strong>最近任务</strong><a class="dl" href="javascript:loadTasks()">刷新</a></div>
+    <div id="tasks"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
