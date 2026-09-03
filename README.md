@@ -9,7 +9,7 @@
 - **双认证**：网页密码（cookie session，持久化）＋ 导演令牌 `H3_DIRECTOR_TOKEN`（Bearer，供 CODEX / 自动化调度，无 cookie 也能调 API）
 - **项目专库资产管理**：`uploads/<project>/<subdir>/`；`/api/refs` 递归扫描、`/api/upload` 安全批量上传（同名覆盖）、`/api/submit` 支持相对路径引用
 - **安全边界**：`safe_upload_path` 防 `..`/绝对路径/盘符/非白名单后缀穿越；令牌只存 Windows 用户环境变量，绝不进配置文件
-- **外网访问**：ngrok / Cloudflare Tunnel 指南（见 `references/NGROK.md`）
+- **外网访问**：Cloudflare Tunnel 指南（见 `references/CLOUDFLARE.md`，免费无流量限制）
 
 ## 目录结构
 
@@ -23,6 +23,7 @@ references/
   launch_scripts.md          安装依赖/启动/开放防火墙 的 .bat
   web/                       最小手机前端模板（index.html + app.js）
   CLOUDFLARE.md               外网穿透（trycloudflare / 固定域名）指南
+  NEW_MACHINE_GUIDE.md       另一台电脑部署教程（下载 SKILL + 初始化 + 新域名隧道）
   cloudflared-config.example.yml  固定隧道配置模板
 ```
 
