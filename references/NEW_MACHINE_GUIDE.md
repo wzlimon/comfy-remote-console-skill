@@ -10,7 +10,7 @@
 - Windows 10/11，已装 **Python 3.10+**（建议 3.13）
 - 本机 **ComfyUI 已在运行**，且能访问 `http://127.0.0.1:8188`
 - 有 Git（用于克隆 SKILL）或直接能下载 ZIP
-- 一个 **新域名**（准备在 Cloudflare 接入；也可用同一 Cloudflare 账号下加第二个站点）
+- **域名已就绪**：第一台已在同一 Cloudflare 账号的 `cnun.com` 下建好子域 `comfy2.cnun.com`（DNS 路由 + tunnel `comfy2-console` 已建好，Tunnel ID `735569eb-0731-4e39-ae00-996d8e9bc375`）。第二台**直接复用**即可，无需再碰 Cloudflare 后台——只需从第一台取得 `comfy2-console` 的凭证文件（见第 3 节方案 A）。
 - 能科学上网（Cloudflare / GitHub 访问）
 
 ---
@@ -62,6 +62,7 @@ comfy-remote-console-skill\references\config.example.yaml  ->  D:\comfy-mobile-s
 comfy-remote-console-skill\references\upload_assets.py     ->  D:\comfy-mobile-studio\upload_assets.py
 comfy-remote-console-skill\references\web\                 ->  D:\comfy-mobile-studio\web\
 comfy-remote-console-skill\references\cloudflared-config.example.yml -> D:\comfy-mobile-studio\cloudflared-config.example.yml
+comfy-remote-console-skill\references\cloudflared-config-comfy2.example.yml -> D:\comfy-mobile-studio\cloudflared-config-comfy2.yml
 ```
 
 > 也可以直接把整个 `references\` 目录内容拷进来，再按需改名。
@@ -128,41 +129,60 @@ runtime:
 
 ---
 
-## 3. 配置新域名的 Cloudflare 固定隧道
+## 3. 配置固定隧道（comfy2.cnun.com 已就绪，直接复用）
 
-第二台机器用**新域名**（假设为 `newdomain.com`，子域用 `comfy.newdomain.com`）。
+第一台已在 Cloudflare 把 `cnun.com` 接入，并在其下建好子域 **`comfy2.cnun.com`**（DNS 路由 + tunnel `comfy2-console` 已创建，Tunnel ID `735569eb-0731-4e39-ae00-996d8e9bc375`）。第二台**无需再登录 Cloudflare、无需再 create / route dns**，直接拿凭证跑即可。
 
-### 3.1 域名接入 Cloudflare（只改 NS，不转移）
+### 方案 A：直接复用 comfy2.cnun.com（推荐，最省事）
 
-1. Cloudflare 后台「添加域名 / Add a Site」→ 填 `newdomain.com`
+1. 从第一台拷贝这两样到第二台（U 盘 / 同步盘均可）：
+   - **凭证**：`C:\Users\wzlimon\.cloudflared\735569eb-0731-4e39-ae00-996d8e9bc375.json`
+     → 第二台放到 `C:\Users\<你的用户名>\.cloudflared\735569eb-0731-4e39-ae00-996d8e9bc375.json`
+   - **配置模板**：本仓库 `references/cloudflared-config-comfy2.example.yml`
+     → 第二台放到 `D:\comfy-mobile-studio\cloudflared-config-comfy2.yml`，并把里面的 `credentials-file` 改成你第二台的实际路径
+2. 确保 2.8 的控制台已在 8790 跑着，启动隧道：
+   ```bat
+   tools\cloudflared.exe tunnel --config cloudflared-config-comfy2.yml run comfy2-console
+   ```
+3. 浏览器 / 手机流量开 `https://comfy2.cnun.com` → 应看到控制台登录页（HTTP 200）。
+
+> ⚠️ **同一 tunnel 不要两台同时长期运行**：Cloudflare HA 会把 `comfy2.cnun.com` 流量在两台间随机分配。正式切到第二台前，先在第一台停掉 comfy2 隧道（让第一台 WorkBuddy 执行「停本机 comfy2 隧道」），第二台再启动。
+
+### 方案 B：第二台自建独立隧道（不想共享第一台凭证时）
+
+若你希望两台完全独立（各自一个 tunnel、互不干扰），走完整自建流程：
+
+#### 3.1 域名接入 Cloudflare（只改 NS，不转移）
+
+1. Cloudflare 后台「添加域名 / Add a Site」→ 填你的域名（可复用 `cnun.com` 再加子域如 `comfy3.cnun.com`，或在同账号下加第二个站点）
 2. 它给你两条 NS（如 `xxx.ns.cloudflare.com` / `yyy.ns.cloudflare.com`）
-3. 回你**买域名的注册商后台**，把域名的 DNS 服务器改成这两条
+3. 回**买域名的注册商后台**，把域名的 DNS 服务器改成这两条
    - ⚠️ 是「改 NS（连接/接入）」，**不是转移域名**（转移是换注册商，别点）
 4. 等 NS 生效（几分钟~24 小时），Cloudflare 面板里该域名变「Active」
 
-### 3.2 本机装 cloudflared
+#### 3.2 本机装 cloudflared
 
 ```bat
 winget install Cloudflare.cloudflared
 ```
 或去 https://github.com/cloudflare/cloudflared/releases 下载 `cloudflared-windows-amd64.exe`，放到 `D:\comfy-mobile-studio\tools\cloudflared.exe`（放项目里可绕开 PATH 问题，和第一台一样）。
 
-### 3.3 登录 + 建隧道 + 绑子域（本机命令行）
+#### 3.3 登录 + 建隧道 + 绑子域（本机命令行）
 
 ```bat
 cloudflared login
 ```
-→ 浏览器弹出，**勾选 `newdomain.com` 授权**。
+→ 浏览器弹出，勾选你的域名授权。
 
 ```bat
 cloudflared tunnel create comfy-console
-cloudflared tunnel route dns comfy-console comfy.newdomain.com
+cloudflared tunnel route dns comfy-console comfy.你的域名.com
 ```
-→ 自动在 Cloudflare DNS 里加好 `comfy.newdomain.com` 的 CNAME 指向隧道，不用手填。
+→ 自动在 Cloudflare DNS 里加好子域的 CNAME 指向隧道，不用手填。
 
 记下 `create` 输出的 **Tunnel ID**（形如 `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）。
 
-### 3.4 填配置 + 启动固定隧道
+#### 3.4 填配置 + 启动固定隧道
 
 把 `cloudflared-config.example.yml` 复制为 `cloudflared-config.yml`，改三处：
 
@@ -170,7 +190,7 @@ cloudflared tunnel route dns comfy-console comfy.newdomain.com
 tunnel: comfy-console
 credentials-file: C:\Users\<你的用户名>\.cloudflared\<TUNNEL_ID>.json
 ingress:
-  - hostname: comfy.newdomain.com
+  - hostname: comfy.你的域名.com
     service: http://localhost:8790
   - service: http_status:404
 ```
@@ -181,9 +201,9 @@ ingress:
 tools\cloudflared.exe tunnel --config cloudflared-config.yml run comfy-console
 ```
 
-### 3.5 验证
+#### 3.5 验证
 
-浏览器开 `https://comfy.newdomain.com` → 应看到控制台登录页（HTTP 200）。手机用流量（非 WiFi）访问同一个地址也应通。
+浏览器开 `https://comfy.你的域名.com` → 应看到控制台登录页（HTTP 200）。手机用流量（非 WiFi）访问同一个地址也应通。
 
 > 临时方案（不绑域名）：`cloudflared tunnel --url http://localhost:8790` 会给你一个 `https://xxxx.trycloudflare.com` 临时地址，免费无流量限制，但每次重启地址都变。详见 `references/CLOUDFLARE.md`。
 

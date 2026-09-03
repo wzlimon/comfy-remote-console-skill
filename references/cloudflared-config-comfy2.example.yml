@@ -1,0 +1,10 @@
+# Cloudflare 固定隧道配置（comfy2.cnun.com，第二台直接复用第一台建好的 tunnel）
+# 第一台已执行：cloudflared tunnel create comfy2-console
+#                cloudflared tunnel route dns comfy2-console comfy2.cnun.com
+# 你只需从第一台拷贝凭证 json + 本文件到第二台，改 credentials-file 为本机实际路径即可。
+tunnel: comfy2-console
+credentials-file: C:\Users\你的用户名\.cloudflared\735569eb-0731-4e39-ae00-996d8e9bc375.json
+ingress:
+  - hostname: comfy2.cnun.com
+    service: http://localhost:8790
+  - service: http_status:404
