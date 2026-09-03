@@ -32,6 +32,44 @@ git clone https://github.com/wzlimon/comfy-remote-console-skill.git "%USERPROFIL
 3. 解压，把里面的 `comfy-remote-console-skill` 文件夹重命名为 `comfy-remote-console`
 4. 放到 `C:\Users\<你的用户名>\.workbuddy\skills\comfy-remote-console\`
 
+### ⚠️ 两个目录要分清（最容易搞混）
+
+| 目录 | 是什么 | 是不是 git 仓库 | 用 git pull 吗 |
+|---|---|---|---|
+| `C:\Users\<用户名>\.workbuddy\skills\comfy-remote-console\` | **SKILL 知识包**（给 WorkBuddy 学 + 模板文件源） | ✅ 是（clone 出来的） | ✅ **在这里 pull** |
+| `D:\comfy-mobile-studio\` | **实际运行的控制台项目** | ❌ 不是 | ❌ pull 无效 |
+
+**`git pull` 只更新 SKILL 目录，不会自动更新正在跑的项目目录。**
+所以完整更新是两步：先 `git pull` 拉模板，再把模板同步进项目目录（见下面）。
+
+### 以后怎么更新（git pull）
+
+```bat
+cd /d %USERPROFILE%\.workbuddy\skills\comfy-remote-console
+git pull
+```
+
+看到 `Already up to date.` 或列出改动文件即成功。
+
+然后把新版同步进项目目录 —— **双击 `D:\comfy-mobile-studio\sync_from_skill.bat`** 即可
+（这个 bat 来自 SKILL 的 `references\`，放在项目根运行）。
+
+它会：
+- 覆盖 `core\`、`workflows\`、`web\`、`server.py`、`run_server.py`、`upload_assets.py`、`inspect_workflow.py`
+- **保留你改过的 `config.yaml`**（不会被冲掉，这是故意的）
+- 若 `config.yaml` / `cloudflared-config.yml` 不存在才从模板新建
+
+同步完重启控制台生效：
+
+```bat
+cd /d D:\comfy-mobile-studio
+.venv\Scripts\python.exe run_server.py
+```
+
+> **如果你是 U 盘拷贝安装的（方式 B）**：那台机器上没有 git 仓库，`git pull` 用不了。
+> 要么在第一台重新下载 ZIP 拷过去，要么干脆把第一台整个 `D:\comfy-mobile-studio\` 目录重新拷一遍覆盖
+> （同样注意别覆盖你自己改的 `config.yaml`）。
+
 ### 验证安装
 
 - 关闭并重新打开 WorkBuddy（必须重启，skill 才加载）
@@ -67,6 +105,9 @@ cd /d D:\comfy-mobile-studio
   references\config.example.yaml  ->  D:\comfy-mobile-studio\config.yaml
   references\upload_assets.py     ->  D:\comfy-mobile-studio\upload_assets.py
   references\inspect_workflow.py  ->  D:\comfy-mobile-studio\inspect_workflow.py
+
+【可选 · 更新用】
+  references\sync_from_skill.bat   ->  D:\comfy-mobile-studio\sync_from_skill.bat
 
 【可选 · 隧道用】
   references\cloudflared-config.example.yml          -> D:\comfy-mobile-studio\cloudflared-config.example.yml
@@ -354,15 +395,20 @@ tools\cloudflared.exe tunnel --config cloudflared-config.yml run comfy-console
 
 ```
 D:\comfy-mobile-studio\
-├── server.py                     # 控制台（由 server_template.py 改名）
+├── server.py                     # 控制台（← 用 server_reference.py 改名，别用 template）
 ├── run_server.py                 # 启动引导：从注册表读令牌后拉起 server.py
-├── config.yaml                   # 配置（由 config.example.yaml 改名）
+├── config.yaml                   # 配置（由 config.example.yaml 改名）★ 唯一需手工改的
 ├── upload_assets.py              # CODEX 批量上传 CLI
+├── inspect_workflow.py           # 查工作流节点 ID 的工具（适配必用）
+├── sync_from_skill.bat           # git pull 后双击：同步最新版，保留 config.yaml
 ├── cloudflared-config.yml        # 固定隧道配置
+├── autostart.bat                 # 一键拉起 server + 隧道（脱离会话常驻）
 ├── tools\cloudflared.exe         # 隧道客户端（可选，放项目里绕开 PATH）
+├── core\                         # 后端模块（6 个，整目录拷）
 ├── web\
 │   ├── index.html
-│   └── app.js
+│   ├── app.js
+│   └── style.css                 # ★ 必须有，少了排版全乱
 ├── workflows\                    # 你的 ComfyUI 工作流 JSON（按 2.5 接入）
 └── data\
     ├── tasks.db
