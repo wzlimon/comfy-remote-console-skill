@@ -36,11 +36,52 @@ git clone https://github.com/wzlimon/comfy-remote-console-skill.git "%USERPROFIL
 
 | 目录 | 是什么 | 是不是 git 仓库 | 用 git pull 吗 |
 |---|---|---|---|
-| `C:\Users\<用户名>\.workbuddy\skills\comfy-remote-console\` | **SKILL 知识包**（给 WorkBuddy 学 + 模板文件源） | ✅ 是（clone 出来的） | ✅ **在这里 pull** |
+| `C:\Users\<用户名>\.workbuddy\skills\comfy-remote-console\` | **SKILL 知识包**（给 WorkBuddy 学 + 模板文件源） | 只有**方式 A（clone）**装的才是 | ✅ **在这里 pull** |
 | `D:\comfy-mobile-studio\` | **实际运行的控制台项目** | ❌ 不是 | ❌ pull 无效 |
 
 **`git pull` 只更新 SKILL 目录，不会自动更新正在跑的项目目录。**
 所以完整更新是两步：先 `git pull` 拉模板，再把模板同步进项目目录（见下面）。
+
+### ❗ `git pull` 报错 `not a git repository` 怎么办
+
+**这是最常见的报错，不是私密仓的问题**（该仓库是 public 的）。原因只有一个：
+你这个 SKILL 目录**不是 `git clone` 出来的**（用了方式 B 下载 ZIP，或是从别的机器拷过来的），
+目录里**没有 `.git` 文件夹**，git 自然不认它是仓库。
+
+验证一下就知道：
+
+```bat
+cd /d %USERPROFILE%\.workbuddy\skills\comfy-remote-console
+dir /a .git
+```
+
+如果提示「找不到文件」，就是没 `.git`。二选一修复：
+
+#### 修法 1：改成真正的 git 仓库（不用重新下载，推荐）
+
+```bat
+cd /d %USERPROFILE%\.workbuddy\skills\comfy-remote-console
+git init
+git remote add origin https://github.com/wzlimon/comfy-remote-console-skill.git
+git fetch origin
+git checkout -b main
+git reset --hard origin/main
+```
+
+执行完再看 `dir /a .git` 就有了，之后 `git pull` 正常可用。
+
+> ⚠️ `reset --hard` 会用远端覆盖本目录文件。SKILL 目录是模板源、本来就不该有本地改动；
+> 但如果你在里面改过东西，先备份。
+
+#### 修法 2：删掉重新 clone（最干净）
+
+```bat
+cd /d %USERPROFILE%\.workbuddy\skills
+rename comfy-remote-console comfy-remote-console.old
+git clone https://github.com/wzlimon/comfy-remote-console-skill.git comfy-remote-console
+```
+
+确认新目录内容无误后，再 `rmdir /s comfy-remote-console.old` 删掉备份。
 
 ### 以后怎么更新（git pull）
 
@@ -50,6 +91,26 @@ git pull
 ```
 
 看到 `Already up to date.` 或列出改动文件即成功。
+
+#### 网络拉不动时：用 bundle 离线更新
+
+如果那台机器访问 GitHub 不畅（超时 / `CONNECT tunnel failed` / `schannel` 报错），
+让第一台生成一个 `.bundle` 文件，U 盘拷过去离线拉取：
+
+**第一台生成**（在 `comfy-remote-console-skill` 仓库里）：
+
+```bat
+git bundle create D:\comfy-mobile-studio\skill-update.bundle main
+```
+
+**第二台拉取**（skill 目录已是 git 仓库的前提下）：
+
+```bat
+cd /d %USERPROFILE%\.workbuddy\skills\comfy-remote-console
+git pull D:\comfy-mobile-studio\skill-update.bundle main
+```
+
+> bundle 里是完整快照，不依赖第二台当前处于哪个版本。
 
 然后把新版同步进项目目录 —— **双击 `D:\comfy-mobile-studio\sync_from_skill.bat`** 即可
 （这个 bat 来自 SKILL 的 `references\`，放在项目根运行）。
