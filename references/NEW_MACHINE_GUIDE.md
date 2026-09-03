@@ -53,17 +53,30 @@ cd /d D:\comfy-mobile-studio
 
 ### 2.2 把 SKILL 里的模板文件复制进来
 
-从克隆/解压得到的 skill 目录，复制以下文件到项目根：
+从克隆/解压得到的 skill 目录，复制以下文件到项目根（`D:\comfy-mobile-studio\`）：
 
 ```
-comfy-remote-console-skill\references\server_template.py   ->  D:\comfy-mobile-studio\server.py
-comfy-remote-console-skill\references\run_server.py        ->  D:\comfy-mobile-studio\run_server.py
-comfy-remote-console-skill\references\config.example.yaml  ->  D:\comfy-mobile-studio\config.yaml
-comfy-remote-console-skill\references\upload_assets.py     ->  D:\comfy-mobile-studio\upload_assets.py
-comfy-remote-console-skill\references\web\                 ->  D:\comfy-mobile-studio\web\
-comfy-remote-console-skill\references\cloudflared-config.example.yml -> D:\comfy-mobile-studio\cloudflared-config.example.yml
-comfy-remote-console-skill\references\cloudflared-config-comfy2.example.yml -> D:\comfy-mobile-studio\cloudflared-config-comfy2.yml
+【必拷 · 整目录】
+  references\core\        ->  D:\comfy-mobile-studio\core\        （6 个后端模块）
+  references\workflows\   ->  D:\comfy-mobile-studio\workflows\   （6 个 API 格式工作流 JSON）
+  references\web\         ->  D:\comfy-mobile-studio\web\         （index.html + app.js + style.css，三个都要）
+
+【必拷 · 单文件】
+  references\server_reference.py  ->  D:\comfy-mobile-studio\server.py   ← 用这个！
+  references\run_server.py        ->  D:\comfy-mobile-studio\run_server.py
+  references\config.example.yaml  ->  D:\comfy-mobile-studio\config.yaml
+  references\upload_assets.py     ->  D:\comfy-mobile-studio\upload_assets.py
+  references\inspect_workflow.py  ->  D:\comfy-mobile-studio\inspect_workflow.py
+
+【可选 · 隧道用】
+  references\cloudflared-config.example.yml          -> D:\comfy-mobile-studio\cloudflared-config.example.yml
+  references\cloudflared-config-comfy2.example.yml   -> D:\comfy-mobile-studio\cloudflared-config-comfy2.yml
 ```
+
+> ⚠️ **三个易错点（照抄时最容易漏）：**
+> 1. 用 **`server_reference.py`** 做 `server.py`，不要用 `server_template.py`（后者是精简教学版，功能不全）。
+> 2. `web\` 里 **`style.css` 必须有**，少了它界面样式全丢、排版错乱。
+> 3. `core\` 和 `workflows\` **整目录拷**，只拷单文件会缺模块/缺工作流。
 
 > 也可以直接把整个 `references\` 目录内容拷进来，再按需改名。
 
@@ -97,17 +110,117 @@ runtime:
   db_file: "data/tasks.db"
 ```
 
-### 2.5 接后端：把 `submit_to_comfyui()` 指向你的 ComfyUI 工作流 ★关键一步
+### 2.5 适配工作流：把网页参数接到你的 ComfyUI 工作流 ★最关键一步
 
-`server.py` 里的 `submit_to_comfyui()` 现在是占位函数。你需要把它改成：读前端表单字段 → 拼成你 ComfyUI 工作流的 API 格式（`/prompt` 接口需要的 JSON）→ `POST http://127.0.0.1:8188/prompt`。
+> 这一步决定「界面能不能生成对」「提交的参数有没有真的传进 ComfyUI」。
+> **完整规则见 `references/WORKFLOWS.md`**，这里给最短可执行路径。
 
-参考你的第一台机器 `D:\comfy-mobile-studio\core\comfy.py` / `core\pipeline.py` 的写法（把工作流 JSON 放到 `workflows/` 目录，用 `requests.post` 投到 8188）。这一步每台机器的模型/节点不同，**必须按你这台的工作流改**，没法通用。
+好消息：现在用的是**完整实现**（`core/comfy.py`），**不需要改任何 Python 代码**，
+只要把工作流 JSON 放进 `workflows/`、把节点 ID 填进 `config.yaml` 即可。
 
-> 想省事：把第一台机器 `D:\comfy-mobile-studio\` 整个目录直接拷到第二台同名位置，然后只改 `config.yaml` 的 `comfyui` 地址/密码即可获得完整功能（含项目专库、上传 API、退出登录按钮）。SKILL 模板是精简框架，生产目录功能更全。
+#### 步骤 1：从你这台的 ComfyUI 导出「API 格式」工作流
 
-### 2.6 （可选）改前端表单 `web/app.js`
+1. ComfyUI 网页里搭好（或打开）工作流
+2. 设置（齿轮）→ 勾选 `Enable Dev Mode Options`
+3. 菜单 → **Save (API Format)** → 保存为 `D:\comfy-mobile-studio\workflows\<名字>.json`
 
-如果第一台机器的表单字段和这台不一样，按你工作流需要的字段调整 `web/index.html` 和 `web/app.js`（例如分辨率、时长、模型选择等）。SKILL 模板给的是最小可用表单。
+⚠️ 必须是 **API 格式**。UI 格式（带 `nodes`/`links` 数组）提交给 `/prompt` 会被拒。
+
+#### 步骤 2：查清节点 ID
+
+```bat
+cd /d D:\comfy-mobile-studio
+.venv\Scripts\python.exe inspect_workflow.py workflows\t2vt2.json
+```
+
+输出里带 `<<<` 的就是需要注入参数的节点。想看某节点有哪些输入字段：
+
+```bat
+.venv\Scripts\python.exe inspect_workflow.py workflows\t2vt2.json --inputs 133 135
+```
+
+通常对应关系：
+
+| 网页参数 | 找这类节点（class_type） | 常用字段 |
+|---|---|---|
+| 提示词 | `CLIPTextEncode` / `MiniMaxH3ImageToVideo` / `MiniMaxH3ReferenceToVideo` | `prompt` 或 `text` |
+| 随机种子 | `RandomNoise` / `KSampler` | `noise_seed` / `seed` |
+| 步数 | `BasicScheduler` / `KSampler` | `steps` |
+| 画面比例 | `ResolutionSelector` | `aspect_ratio` |
+| 分辨率 | `ResolutionSelector` | `megapixels` |
+| 时长 | `PrimitiveFloat`（标题常为 Float (duration)） | `value` |
+| 图片宽高 | `EmptySD3LatentImage` | `width` / `height` |
+
+#### 步骤 3：填进 config.yaml
+
+以 `turbo` 为例（照你查到的 ID 改）：
+
+```yaml
+comfyui:
+  workflow_options:
+    "标准流程": "standard"
+    "Turbo加速": "turbo"
+    "文生图": "zimage"
+  workflow_default: "turbo"
+  mode_workflows:
+    t2v: ["standard", "turbo"]
+    i2v: ["standard", "turbo"]
+    flf: ["standard", "turbo"]
+    r2v: ["r2v", "r2vt"]
+    t2i: []
+  workflows:
+    turbo:
+      file: "workflows/t2vt2.json"      # ← 你的 JSON
+      inject:
+        prompt_node: "133"              # ← 你查到的 ID
+        prompt_field: "prompt"
+        seed_node: "131"
+        seed_field: "noise_seed"
+        ratio_node: "115"
+        ratio_field: "aspect_ratio"
+        duration_node: "135"
+        duration_field: "value"
+        resolution_node: "115"
+        resolution_field: "megapixels"
+        steps_node: "126"
+        steps_field: "steps"
+        steps_options: [4,5,6,7,8,9,10,11,12]
+```
+
+要点：
+
+- 节点 ID 格式：顶层=`115`，子图内=`父:子`（如 `105:104`、`57:27`）
+- `*_node` **留空** = 该工作流不支持这个参数 → 前端自动隐藏对应字段
+- `steps_options` 只有 1 个值 → 前端隐藏步数字段
+- **图片类工作流**必须加 `media_type: image`，并用 `width_node`/`height_node` + `size_baseline`，
+  其 `ratio_options` 值是 `16:9` 这种简单格式（视频类是 `16:9 (Widescreen)`，**别混用**）
+- 用不到的工作流：不写进 `workflow_options` 就不会出现在界面上
+
+#### 步骤 4：验证
+
+重启服务 → 打开网页 → 切到该流程，确认芯片（步数/比例/时长）正常显示 →
+提交一个**最短时长 + 最低分辨率**的任务 → 看 ComfyUI 是否收到、参数是否生效。
+
+> 想省事：把第一台机器 `D:\comfy-mobile-studio\` 整个目录拷到第二台同名位置，
+> 然后只改 `config.yaml`（密码、ComfyUI 地址、output_dir、Topaz 路径）并**按上面重查节点 ID**
+> 即可获得完整功能（含项目专库、上传 API、退出登录、6 个工作流）。
+> 注意：节点 ID 与你这台的 ComfyUI 工作流绑定，换机器/换工作流后**必须重新核对**。
+
+### 2.6 （一般不用改）前端表单
+
+前端的三个文件（`index.html` / `app.js` / `style.css`）**直接沿用即可**，通常无需修改：
+
+- 所有选项（流程、步数、时长、分辨率、比例）都从 `/api/options` 动态读取，
+  **改 `config.yaml` 即改界面**，前端不硬编码任何选项
+- 界面按模式自动显隐：图生/首尾帧显示图片槽并隐藏比例；万能参考显示 3 个参考图槽；
+  文生图隐藏时长/分辨率/超分
+
+只有当你要**新增字段**（比如加一个「模型选择」或「镜头运动」下拉）时才改前端，
+此时需同步改三个地方：`web/index.html`（加 DOM）、`web/app.js`（加提交字段）、
+`server.py` 的 `/api/submit`（接收字段）与 `store.create()`（落库）。
+
+> 改前端前请先读 `references/API_AND_UI.md`，里面有完整界面结构图、
+> **关键 DOM id 清单**（前端 JS 依赖这些 id，改名即失效）和提交参数字段表。
 
 ### 2.7 设导演令牌（给 API / CODEX 用）
 

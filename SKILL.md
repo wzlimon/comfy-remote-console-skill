@@ -3,7 +3,7 @@ name: comfy-remote-console
 description: "在一台装了 ComfyUI 的 Windows 电脑上，搭建一个手机可远程访问的网页控制台（表单提交→本机 ComfyUI 生成→网页取片），并具备：双认证（网页密码 + 导演令牌 Bearer 供 CODEX/自动化调度）、项目专库资产管理（/api/refs 递归、/api/upload 安全批量上传、同名覆盖）、Cloudflare trycloudflare 公网隧道（免费、无流量限制）。当用户要「让另一台电脑也能手机远程操控 ComfyUI」「把本地 AI 服务做成手机网页控制台」「给自动化/CODEX 开放批量上传资产接口」时使用。"
 description_zh: "为本地 ComfyUI 搭建手机可远程访问的网页控制台（双认证 + 项目专库 + trycloudflare 隧道）"
 description_en: "Mobile-accessible remote web console for a local ComfyUI (dual auth + project asset library + trycloudflare tunnel)"
-version: 1.1.0
+version: 1.2.0
 allowed-tools:
   - Read
   - Write
@@ -43,15 +43,48 @@ trigger: ["手机远程", "远程控制台", "comfy 手机", "外网访问 comfy
 
 ---
 
+## 一点五、references 文件清单（部署前先看这张表）
+
+| 文件 / 目录 | 用途 | 新机器怎么用 |
+|---|---|---|
+| **`server_reference.py`** | **真实可运行的服务端**（全部接口 + 安全校验 + 退出登录） | **直接当 `server.py` 用** |
+| `server_template.py` | 精简教学版 | 仅作阅读参考，功能不全，**勿用于部署** |
+| **`core/`** | 后端核心：`comfy.py`（工作流注入）、`pipeline.py`、`store.py`、`topaz.py`、`config.py`、`delivery.py` | **整目录拷**，一般不用改代码 |
+| **`workflows/`** | 6 个 ComfyUI **API 格式**工作流 JSON | **整目录拷**，再换成新机器自己导出的 |
+| **`web/`** | 前端三件套 `index.html` + `app.js` + **`style.css`** | **整目录拷，三个都要** |
+| **`config.example.yaml`** | 完整配置模板（含 5 个工作流的节点映射） | 复制为 `config.yaml` 后据实填 |
+| **`inspect_workflow.py`** | 查工作流节点 ID / 输入字段 | **新机器适配必用** |
+| **`WORKFLOWS.md`** | 工作流命名、位置、节点映射、适配流程、排错 | **必读** |
+| **`API_AND_UI.md`** | 界面结构、DOM id、提交参数格式、API 一览 | **必读**（做界面前） |
+| `run_server.py` | 从注册表读令牌后启动 server | 直接拷 |
+| `upload_assets.py` | CODEX 批量上传 CLI | 直接拷 |
+| `NEW_MACHINE_GUIDE.md` | 第二台机器完整部署教程（含域名/隧道） | 按它一步步做 |
+| `CLOUDFLARE.md` | 隧道方案（trycloudflare / 固定域名） | 需要外网时看 |
+| `launch_scripts.md` | 各类 .bat 启动脚本 | 按需取 |
+
+> 部署顺序建议：先整套拷过去跑通 → 再按 `WORKFLOWS.md` 换工作流 → 最后按 `API_AND_UI.md` 微调界面。
+
+---
+
 ## 二、在新机器上部署（步骤）
 
 1. **前置**：Windows + Python 3.10+；本机 ComfyUI 已在 `127.0.0.1:8188` 跑起来；（可选）已装 `cloudflared`（外网访问用，见第七节）。
 2. 把本 skill `references/` 下的代码落到新目录（如 `D:\comfy-mobile-studio\`）：
-   - `server_template.py` → 改名/扩展为 `server.py`（这是控制台主体）
-   - `config.example.yaml` → 复制为 `config.yaml` 并据实填写（见第四节）
+   - `server_reference.py` → **直接用它做 `server.py`**（真实可运行版，已含全部接口与安全校验）
+     - `server_template.py` 只是精简教学版，功能不全，**实际部署请用 `server_reference.py`**
+   - `core/`（**整目录**）：`comfy.py`（工作流注入核心）、`config.py`、`pipeline.py`、`store.py`、`topaz.py`、`delivery.py`
+   - `workflows/`（**整目录**）：6 个 ComfyUI API 格式工作流 JSON，**必须一起拷**，否则界面没有可用流程
+   - `web/`（**整目录，三个文件缺一不可**）：`index.html` + `app.js` + **`style.css`**
+     - 少了 `style.css` 界面会样式全丢、排版错乱
+   - `config.example.yaml` → 复制为 `config.yaml` 并据实填写（见第四、五节）
    - `run_server.py`（从注册表读令牌后启动，解决「工具环境没继承用户环境变量」问题）
    - `upload_assets.py`（给 CODEX 的批量上传 CLI）
-   - `web/`（手机网页前端模板，按自己的字段改）
+   - `inspect_workflow.py`（查工作流节点 ID 的工具，新机器适配必用）
+3. **按 `references/WORKFLOWS.md` 适配工作流**——这是决定界面/参数对不对的关键步骤：
+   - 从新机器的 ComfyUI 导出「API 格式」工作流 JSON 到 `workflows/`
+   - 用 `python inspect_workflow.py workflows/xxx.json` 查清节点 ID
+   - 把 ID 填进 `config.yaml` 的 `comfyui.workflows.<name>.inject` 段
+   - **不要照抄本机的节点 ID**，那是 MiniMax H3 / Z-IMAGE 工作流专属的
 3. 建虚拟环境装依赖：`python -m venv .venv && .venv\Scripts\pip install -r requirements.txt`
    - requirements：`flask>=3.0 requests>=2.31 pyyaml>=6.0 waitress>=3.0`
 4. 设令牌（管理员 PowerShell）：
@@ -78,11 +111,21 @@ trigger: ["手机远程", "远程控制台", "comfy 手机", "外网访问 comfy
 - 文件路由 `/upload /video /image /thumb` 全部走 `safe_upload_path`/`resolve_asset` 安全校验。
 - **后端接入点**：模板里的 `submit_to_comfyui()` 是占位函数，注释写清了怎么改成「POST ComfyUI /prompt + 轮询 /history」的真实调用。另一台机器照此接到自己的 workflow。
 
-> 不要直接复制本项目（comfy-mobile-studio）的全部 `core/` 模块和 workflow JSON——那是特定模型（MiniMax H3 / Z-IMAGE / r2v）的配置。本 skill 给的是**框架**，后端与表单字段请按新机器的实际工作流改写。
+> **关于 `core/` 与 `workflows/`（重要，别误解）：**
+> 早期版本建议「不要复制 core/ 和 workflow JSON」，结果新机器没有任何可参照的实现，
+> 只能凭空猜，生成的界面和参数都是错的。**现在本 skill 已把完整可运行实现全部带上**：
+> - `core/` + `workflows/` + `web/` + `server_reference.py` = 本机长期运行的真实版本
+> - 新机器的正确做法：**先整套拷过去跑通**，再按 `WORKFLOWS.md` 把工作流换成自己的
+> - 也就是说：`core/` 的注入逻辑一般**不用改代码**，只改 `config.yaml` 的 `inject` 节点映射
+> - 只有当新工作流结构差异极大（参数要经中间节点换算等）时才动 `core/comfy.py`
+>
+> 别从零手写——照着真实实现改，比凭空写靠谱得多。
 
 ---
 
 ## 四、config.yaml 要点
+
+完整模板见 `references/config.example.yaml`（含全部注释与 5 个工作流的节点映射）。核心骨架：
 
 ```yaml
 server:
@@ -91,14 +134,76 @@ server:
   password: "改一个强密码"   # 开外网穿透前必填
   session_days: 30
   max_upload_mb: 200        # 自动化批量传大图放宽
+
 comfyui:
   host: "127.0.0.1"
   port: 8188
+
+  # 界面显示名 -> 配置名
+  workflow_options:
+    "Turbo加速": "turbo"
+    "文生图": "zimage"
+  workflow_default: "turbo"
+
+  # 每个模式下可选的流程；留空=前端隐藏该字段
+  mode_workflows:
+    t2v: ["standard", "turbo"]
+    r2v: ["r2v", "r2vt"]
+    t2i: []
+
+  workflows:
+    turbo:
+      file: "workflows/t2vt2.json"     # 必须是 API 格式 JSON
+      inject:                          # ★ 网页参数 -> 工作流节点的映射
+        prompt_node: "133"             #    顶层节点=纯数字；子图内=父:子(105:104)
+        prompt_field: "prompt"
+        seed_node: "131"
+        seed_field: "noise_seed"
+        steps_node: "126"              #    留空=不支持，前端自动隐藏该字段
+        steps_field: "steps"
+        steps_options: [4,5,6,7,8,9,10,11,12]
+        ratio_node: "115"
+        ratio_field: "aspect_ratio"
+        duration_node: "135"
+        duration_field: "value"
+        resolution_node: "115"
+        resolution_field: "megapixels"
+    zimage:
+      file: "workflows/zimage.json"
+      media_type: image                # ★ 图片类必须标
+      inject:
+        width_node: "57:13"            #   图片类直接注入像素，不用 megapixels
+        height_node: "57:13"
+        size_baseline: 1280
+
 runtime:
   uploads_dir: "data/uploads"
   outputs_dir: "data/outputs"
   db_file: "data/tasks.db"
 ```
+
+**关键：`inject` 段的节点 ID 是机器相关的，必须用 `inspect_workflow.py` 在新机器上重新查。**
+详细规则、字段全表、常见错误见 **`references/WORKFLOWS.md`**。
+
+---
+
+## 四之二、网页界面与提交参数格式
+
+**生成界面前必读 `references/API_AND_UI.md`**，里面含：
+
+- 界面完整结构图 + **关键 DOM id 清单**（前端 JS 依赖这些 id，改名即失效）
+- 「界面由 `/api/options` 驱动」的机制：**改 config.yaml 即改界面，前端不硬编码任何选项**
+- `POST /api/submit` 的**完整字段表**与各模式必填矩阵
+- 全部 API 一览 + 状态码约定
+
+界面三要点（最容易错）：
+
+1. **`web/` 三个文件必须齐全**：`index.html` + `app.js` + **`style.css`**。少 `style.css` 界面直接崩。
+2. **选项全部来自 `/api/options`**，不要写死在前端。流程芯片按 `mode_workflows[mode]` 过滤。
+3. **提交用 multipart/form-data**，图片有两种传法：
+   - 复用图库：传 `<slot>_name` = `rel_path`（如 `proj/chars/a.png`）
+   - 新上传：传文件字段 `<slot>`（如 `ref_0`）
+   - 服务端优先取 `_name`；含 `..`/绝对路径/盘符则判无效回退上传（防穿越）
 
 ---
 

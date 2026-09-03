@@ -1,43 +1,347 @@
 # ============================================================
-# ComfyUI 手机控制台 配置样例
-# 复制为 config.yaml，按本机实际情况填写
+# 手机网页表单 -> ComfyUI -> Topaz 超分 -> 网页取片 + 网盘备份
+# 完整配置模板（含工作流节点注入映射）
+#
+# 用法：复制为 config.yaml，按注释据实填写。
+# 标 [必改] 的必须按新机器的实际情况改；标 [参考值] 的是本机实测值，
+#        换机器/换工作流后必须用 inspect_workflow.py 重新核对。
+# 详见 references/WORKFLOWS.md
 # ============================================================
 
 # ------------------------------------------------------------
-# 1. Web 服务（手机浏览器访问的地址）
+# 1. Web 服务（手机浏览器访问的那个地址）
 # ------------------------------------------------------------
 server:
-  # 0.0.0.0 = 允许局域网内手机访问；只想本机用就改 127.0.0.1
+  # 0.0.0.0 = 允许局域网内的手机访问；只想本机用就改 127.0.0.1
   host: "0.0.0.0"
   port: 8790
 
-  # 访问密码。留空 = 不校验（仅建议家里局域网用）。
-  # ★ 一旦开 ngrok / 外网穿透，务必填一个强密码。
+  # [必改] 访问密码。留空 = 不校验（仅家里局域网）。
+  # 开外网穿透时必须设强密码。
   password: "改成你自己的强密码"
 
   # 会话有效期（天）。输过一次密码后多久不用再输
   session_days: 30
 
   # 单次 HTTP 请求（含所有上传文件）大小上限（MB）。
-  # 自动化/CODEX 批量上传资产时可能一次带多个大图，建议 200。
+  # CODEX 批量上传资产时可能一次带多个大图，放宽到 200MB。
   max_upload_mb: 200
 
 # ------------------------------------------------------------
-# 2. ComfyUI（本机地址，默认 8188）
+# 2. ComfyUI
 # ------------------------------------------------------------
 comfyui:
   host: "127.0.0.1"
   port: 8188
-  # 模板里的 submit_to_comfyui() 会按你的工作流把任务投到这里。
-  # 需要的字段（示例）：
-  # workflow_default: "turbo"
-  # workflows:
-  #   turbo: { file: "workflows/t2v.json", ... }
+
+  # 网页上「流程」的选项：显示名 -> 配置名
+  # 显示名给手机用户看，配置名是后端索引（也是提交时的 workflow 参数值）
+  workflow_options:
+    "标准流程": "standard"
+    "Turbo加速": "turbo"
+    "万能参考": "r2v"
+    "参考加速": "r2vt"
+    "文生图": "zimage"
+  workflow_default: "turbo"
+
+  # 每个「模式」下可用的「流程」选项。不在列表里的工作流不会出现在对应模式。
+  # 列表留空 -> 前端隐藏「流程」字段（如文生图 t2i）
+  mode_workflows:
+    t2v: ["standard", "turbo"]   # 文生视频
+    i2v: ["standard", "turbo"]   # 图生视频
+    flf: ["standard", "turbo"]   # 首尾帧
+    r2v: ["r2v", "r2vt"]         # 万能参考（只有参考系列）
+    t2i: []                      # 文生图（自动走 zimage）
+
+  # ==========================================================
+  # 工作流定义：文件位置 + 节点注入映射
+  #
+  # file:    相对项目根的路径，必须是 ComfyUI「API 格式」导出的 JSON
+  # inject:  把网页参数注入到哪个节点的哪个字段
+  #          节点 ID 格式：顶层=纯数字(115)；子图内=父:子(105:104、57:27)
+  #          *_node 留空 = 该工作流不支持这个参数（前端会自动隐藏对应字段）
+  #
+  # [参考值] 以下节点 ID 来自本机 MiniMax H3 / Z-IMAGE 工作流，
+  #          换机器后请用 inspect_workflow.py 重新核对再填。
+  # ==========================================================
+  workflows:
+
+    standard:
+      # H3 标准模型，固定 20 步，速度慢但稳
+      file: "workflows/t2v.json"
+      inject:
+        # MiniMaxH3ImageToVideo：装提示词，也是图生/首尾帧时接图片的节点
+        prompt_node: "105:104"
+        prompt_field: "prompt"
+        negative_node: ""
+        negative_field: "negative_prompt"
+        seed_node: "105:15"
+        seed_field: "noise_seed"
+
+        ratio_node: "115"
+        ratio_field: "aspect_ratio"
+        ratio_default: "16:9 (Widescreen)"
+        ratio_options:
+          "16:9 横屏": "16:9 (Widescreen)"
+          "9:16 竖屏": "9:16 (Portrait Widescreen)"
+          "1:1 方形": "1:1 (Square)"
+          "21:9 超宽屏": "21:9 (Ultrawide)"
+          "4:3 标清横屏": "4:3 (Standard)"
+          "3:4 标清竖屏": "3:4 (Portrait Standard)"
+
+        duration_node: "105:111"
+        duration_field: "value"
+        duration_default: 5
+
+        resolution_node: "115"
+        resolution_field: "megapixels"
+        resolution_default: 0.4
+        resolution_options:
+          "480P": 0.4
+          "720P": 0.9
+          "1080P": 2.0
+
+        steps_node: "105:9"
+        steps_field: "steps"
+        steps_default: 20
+        steps_options: [20]        # 只有 1 个 -> 前端隐藏步数字段
+
+    turbo:
+      # Turbo LoRA：4~12 步出片，速度快很多，日常首选
+      file: "workflows/t2vt2.json"
+      inject:
+        prompt_node: "133"
+        prompt_field: "prompt"
+        negative_node: ""
+        negative_field: "negative_prompt"
+        seed_node: "131"
+        seed_field: "noise_seed"
+
+        ratio_node: "115"
+        ratio_field: "aspect_ratio"
+        ratio_default: "16:9 (Widescreen)"
+        ratio_options:
+          "16:9 横屏": "16:9 (Widescreen)"
+          "9:16 竖屏": "9:16 (Portrait Widescreen)"
+          "1:1 方形": "1:1 (Square)"
+          "21:9 超宽屏": "21:9 (Ultrawide)"
+          "4:3 标清横屏": "4:3 (Standard)"
+          "3:4 标清竖屏": "3:4 (Portrait Standard)"
+
+        duration_node: "135"
+        duration_field: "value"
+        duration_default: 5
+
+        resolution_node: "115"
+        resolution_field: "megapixels"
+        resolution_default: 0.4
+        resolution_options:
+          "480P": 0.4
+          "720P": 0.9
+          "1080P": 2.0
+
+        steps_node: "126"
+        steps_field: "steps"
+        steps_default: 6
+        steps_options: [4, 5, 6, 7, 8, 9, 10, 11, 12]
+
+    r2v:
+      # 万能参考生视频：MiniMaxH3ReferenceToVideo，最多 3 张参考图保持主体一致。
+      # 注意：Turbo 版没有这个模型，参考生视频只能用标准流程。
+      file: "workflows/r2v.json"
+      inject:
+        prompt_node: "136"
+        prompt_field: "prompt"
+        negative_node: ""
+        negative_field: "negative_prompt"
+
+        # r2v 节点没有随机种子输入，留空即可
+        seed_node: ""
+
+        ratio_node: "115"
+        ratio_field: "aspect_ratio"
+        ratio_default: "16:9 (Widescreen)"
+        ratio_options:
+          "16:9 横屏": "16:9 (Widescreen)"
+          "9:16 竖屏": "9:16 (Portrait Widescreen)"
+          "1:1 方形": "1:1 (Square)"
+          "21:9 超宽屏": "21:9 (Ultrawide)"
+          "4:3 标清横屏": "4:3 (Standard)"
+          "3:4 标清竖屏": "3:4 (Portrait Standard)"
+
+        # 时长（秒）：节点 132 是 PrimitiveFloat，
+        # 喂给 ComfyMathExpression(131) 的 a，由公式换算成帧数
+        duration_node: "132"
+        duration_field: "value"
+        duration_default: 5
+
+        resolution_node: "115"
+        resolution_field: "megapixels"
+        resolution_default: 0.4
+        resolution_options:
+          "480P": 0.4
+          "720P": 0.9
+          "1080P": 2.0
+
+        # r2v 不支持自定义采样步数
+        steps_node: ""
+        steps_options: []
+
+    r2vt:
+      # 万能参考 + MiniMax-H3 Turbo LoRA。与 r2v 节点结构一致，
+      # 仅多了节点 145（Turbo LoRA），其余注入节点与 r2v 相同。
+      file: "workflows/r2vt.json"
+      inject:
+        prompt_node: "136"
+        prompt_field: "prompt"
+        negative_node: ""
+        negative_field: "negative_prompt"
+
+        seed_node: ""
+
+        ratio_node: "115"
+        ratio_field: "aspect_ratio"
+        ratio_default: "16:9 (Widescreen)"
+        ratio_options:
+          "16:9 横屏": "16:9 (Widescreen)"
+          "9:16 竖屏": "9:16 (Portrait Widescreen)"
+          "1:1 方形": "1:1 (Square)"
+          "21:9 超宽屏": "21:9 (Ultrawide)"
+          "4:3 标清横屏": "4:3 (Standard)"
+          "3:4 标清竖屏": "3:4 (Portrait Standard)"
+
+        duration_node: "132"
+        duration_field: "value"
+        duration_default: 5
+
+        resolution_node: "115"
+        resolution_field: "megapixels"
+        resolution_default: 0.4
+        resolution_options:
+          "480P": 0.4
+          "720P": 0.9
+          "1080P": 2.0
+
+        steps_node: "124"
+        steps_field: "steps"
+        steps_default: 6
+        steps_options: [4, 5, 6, 7, 8, 9, 10, 11, 12]
+
+    zimage:
+      # Z-IMAGE-turbo 文生图（8 步出图）。产出图片，不超分直接交付。
+      file: "workflows/zimage.json"
+      media_type: image           # ★ 图片类必须标，否则按视频处理会出错
+      inject:
+        # CLIPTextEncode：装提示词（注意字段名是 text，不是 prompt）
+        prompt_node: "57:27"
+        prompt_field: "text"
+        negative_node: ""
+        negative_field: "negative_prompt"
+
+        # KSampler：种子 + 步数
+        seed_node: "57:3"
+        seed_field: "seed"
+        steps_node: "57:3"
+        steps_field: "steps"
+        steps_default: 8
+        steps_options: [4, 6, 8]
+
+        # ★ 图片类按比例直接注入 width/height 像素（EmptySD3LatentImage）。
+        #   ratio_options 的值是简单 W:H（"16:9"），不是视频类的
+        #   "16:9 (Widescreen)"，由后端按 size_baseline 算出像素。两者别混用。
+        width_node: "57:13"
+        width_field: "width"
+        height_node: "57:13"
+        height_field: "height"
+        size_baseline: 1280
+        ratio_default: "16:9 横屏"
+        ratio_options:
+          "16:9 横屏": "16:9"
+          "9:16 竖屏": "9:16"
+          "1:1 方形": "1:1"
+          "4:3 标清横屏": "4:3"
+          "3:4 标清竖屏": "3:4"
+          "21:9 超宽屏": "21:9"
+
+        # 文生图无时长、不超分，这些字段留空
+        duration_node: ""
+        duration_default: 0
+        resolution_node: ""
+        resolution_default: 0
+        resolution_options: {}
+
+  # 图生视频 / 首尾帧：动态往工作流里插 LoadImage 节点时用的缩放算法
+  image_upscale_method: "nearest-exact"
+
+  # [必改] ComfyUI 的 output 目录（后端从这里回收生成结果）
+  output_dir: "D:/path/to/ComfyUI/output"
+
+  # 单个任务最长等待（秒）。1080P 长视频可能要 2000+ 秒
+  timeout: 3600
+  poll_interval: 3
 
 # ------------------------------------------------------------
-# 3. 运行时目录
+# 3. Topaz Video AI 超分（不需要就整个 enabled: false）
+# ------------------------------------------------------------
+topaz:
+  enabled: false                 # [必改] 没装 Topaz 就设 false
+
+  # [必改] 以下三个路径指向你的 Topaz 安装位置
+  ffmpeg: "D:/path/to/Topaz Video AI/ffmpeg.exe"
+  ffprobe: "D:/path/to/Topaz Video AI/ffprobe.exe"
+  model_dir: "D:/path/to/Topaz Video AI/models"
+
+  model: "prob-4"
+  target_width: 1920
+  target_height: 1080
+  aspect_mode: "stretch"
+
+  encoder: "h264_nvenc"          # 无 N 卡改用 libx264
+  bitrate: "12M"
+
+  device: 0
+  vram: 1
+  instances: 1
+
+  timeout: 1800
+  # AI 模型单次静默超时（秒），超过即强杀回退纯缩放，保证不卡死流水线
+  tvai_timeout: 600
+
+# ------------------------------------------------------------
+# 4. 百度网盘备份（成品在网页可直接下载，这里再存一份到云端）
+# ------------------------------------------------------------
+baidu:
+  enabled: false                 # 关掉就只留本地成品
+
+  sync_root: "D:/bdwp"           # [必改] 网盘同步根目录
+  target_subdir: "minimax_video_1080"
+
+  filename_template: "{date}_{time}_{prompt_short}.mp4"
+  prompt_short_len: 20
+  use_temp_suffix: true
+  upload_wait_hint: 60
+
+# ------------------------------------------------------------
+# 5. 运行时目录
 # ------------------------------------------------------------
 runtime:
-  uploads_dir: "data/uploads"      # 资产库根（含项目专库）
-  outputs_dir: "data/outputs"     # 成品输出（按项目分子目录）
-  db_file: "data/tasks.db"        # 任务记录库
+  results_dir: "data/results"    # 成品留存（网页下载从这里读）
+  uploads_dir: "data/uploads"    # 上传的图片
+  thumbs_dir: "data/thumbs"      # 视频封面缩略图
+  db_file: "data/tasks.db"       # 生成记录数据库
+
+  # 按项目分库的总输出根。生成结果按 project 存到：
+  #   <outputs_dir>/<project>/raw/        超分前原片
+  #   <outputs_dir>/<project>/upscaled/   超分后成品
+  #   <outputs_dir>/<project>/thumbs/     封面缩略图
+  # 未指定 project 的任务仍落到上面的 results_dir / thumbs_dir（向后兼容）。
+  outputs_dir: "data/outputs"
+
+  # 超分前的原片是否留档，留空表示不留
+  keep_source_dir: ""
+
+  max_retries: 1
+
+  log_dir: "logs"
+  log_level: "INFO"
+  log_keep_days: 14
